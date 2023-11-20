@@ -8,18 +8,17 @@
 #define WEBHOOK_URL_MAX_SIZE			1000
 #define WEBHOOK_THREAD_NAME_MAX_SIZE	100
 
-ConVar g_cvWebhook;
-ConVar g_cvWebhookRetry;
-ConVar g_cvChannelType;
-ConVar g_cvThreadName;
-ConVar g_cvThreadID;
+ConVar g_cvWebhook, g_cvWebhookRetry, g_cvChannelType;
+ConVar g_cvThreadName, g_cvThreadID;
+
+char g_sMap[PLATFORM_MAX_PATH];
 
 public Plugin myinfo = 
 {
 	name = "Stripper Discord",
 	author = ".Rushaway",
 	description = "Stripper API for Discord",
-	version = "1.0",
+	version = "1.1",
 	url = ""
 }
 
@@ -34,6 +33,11 @@ public void OnPluginStart()
 	g_cvThreadID = CreateConVar("sm_stripper_threadid", "0", "If thread_id is provided, the message will send in that thread.", FCVAR_PROTECTED);
 
 	AutoExecConfig(true);
+}
+
+public void OnMapInit(const char[] mapName)
+{
+	FormatEx(g_sMap, sizeof(g_sMap), mapName);
 }
 
 public void Stripper_OnErrorLogged(char[] sBuffer, int maxlen)
@@ -51,10 +55,7 @@ public void Stripper_OnErrorLogged(char[] sBuffer, int maxlen)
 	int iTime = GetTime();
 	FormatTime(sTime, sizeof(sTime), "%m/%d/%Y @ %H:%M:%S", iTime);
 
-	char currentMap[PLATFORM_MAX_PATH];
-	GetCurrentMap(currentMap, sizeof(currentMap));
-
-	Format(sMessage, sizeof(sMessage), ":eyes: Error was detected on %s @ %s```%s```", currentMap, sTime, sBuffer);
+	Format(sMessage, sizeof(sMessage), ":eyes: Error was detected on %s @ %s```%s```", g_sMap, sTime, sBuffer);
 
 	if(StrContains(sMessage, "\"") != -1)
 		ReplaceString(sMessage, sizeof(sMessage), "\"", "");
@@ -76,7 +77,7 @@ stock void SendWebHook(char sMessage[1999], char sWebhookURL[WEBHOOK_URL_MAX_SIZ
 	{
 		if (!sThreadName[0] && !sThreadID[0])
 		{
-			LogError("[CallAdmin] Thread Name or ThreadID not found or specified.");
+			LogError("[Stripper-Discord] Thread Name or ThreadID not found or specified.");
 			delete webhook;
 			return;
 		}
@@ -117,23 +118,7 @@ public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 
 	delete pack;
 	
-	if (!IsThreadReply && response.Status != HTTPStatus_OK)
-	{
-		if (retries < g_cvWebhookRetry.IntValue)
-		{
-			PrintToServer("[Stripper-Discord] Failed to send the webhook. Resending it .. (%d/%d)", retries, g_cvWebhookRetry.IntValue);
-			SendWebHook(sMessage, sWebhookURL);
-			retries++;
-			return;
-		}
-		else
-		{
-			LogError("[CallAdmin] Failed to send the webhook after %d retries, aborting.", retries);
-			return;
-		}
-	}
-
-	if (IsThreadReply && response.Status != HTTPStatus_NoContent)
+	if ((!IsThreadReply && response.Status != HTTPStatus_OK) || (IsThreadReply && response.Status != HTTPStatus_NoContent))
 	{
 		if (retries < g_cvWebhookRetry.IntValue)
 		{
@@ -146,9 +131,7 @@ public void OnWebHookExecuted(HTTPResponse response, DataPack pack)
 		{
 			LogError("[Stripper-Discord] Failed to send the webhook after %d retries, aborting.", retries);
 			LogError("[Stripper-Discord] Failed message : %s", sMessage);
-			return;
 		}
 	}
-
 	retries = 0;
 }
